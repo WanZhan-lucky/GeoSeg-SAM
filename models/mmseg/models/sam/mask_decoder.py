@@ -289,17 +289,17 @@ class MaskDecoder(nn.Module):
         b, c, h, w = upscaled_embedding.shape #(1,32,256,256)
 
         ##### add MLP by pxy 230706 ######
-        # pyr = torch.zeros_like(upscaled_embedding)  # 永远有
-        # if pyramid_embeddings is not None and self.use_pyramid:
-        #     for k, feat in enumerate(pyramid_embeddings):
-        #         add = self.pyr_norms[k](self.pyr_projs[k](feat))
-        #         if add.shape[-2:] != upscaled_embedding.shape[-2:]:
-        #             add = F.interpolate(add, size=upscaled_embedding.shape[-2:], mode="bilinear", align_corners=False)
-        #         pyr = pyr + self.pyr_gammas[k] * add
+        pyr = torch.zeros_like(upscaled_embedding)  # 永远有
+        if pyramid_embeddings is not None and self.use_pyramid:
+            for k, feat in enumerate(pyramid_embeddings):
+                add = self.pyr_norms[k](self.pyr_projs[k](feat))
+                if add.shape[-2:] != upscaled_embedding.shape[-2:]:
+                    add = F.interpolate(add, size=upscaled_embedding.shape[-2:], mode="bilinear", align_corners=False)
+                pyr = pyr + self.pyr_gammas[k] * add
 
-        # up_cat = torch.cat([upscaled_embedding, pyr], dim=1)  # (B,64,256,256)
+        up_cat = torch.cat([upscaled_embedding, pyr], dim=1)  # (B,64,256,256)
         # 
-        up_cat = torch.cat([upscaled_embedding, upscaled_embedding_src], dim=1)  # (B,64,256,256)
+        # up_cat = torch.cat([upscaled_embedding, upscaled_embedding_src], dim=1)  # (B,64,256,256)
         cls_upscaled_embedding = self.cls_upscaling(up_cat)
 
 
