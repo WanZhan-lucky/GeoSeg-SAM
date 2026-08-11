@@ -1,6 +1,24 @@
 # GeoSeg-SAM
 
-GeoSeg-SAM is a SAM-based adaptation framework for closed-set semantic segmentation of geological environments in remote sensing imagery. This repository contains the training code and configurations for the WLK and YJS datasets.
+GeoSeg-SAM is a SAM-based framework for closed-set semantic segmentation of geological environments in remote sensing imagery. The repository provides the training pipeline, model implementation, and configurations for the WLK and YJS datasets.
+
+Repository: `https://github.com/WanZhan-lucky/GeoSeg-SAM`
+
+## Overview
+
+GeoSeg-SAM adapts the SAM ViT-B architecture to multi-class geological semantic segmentation. The default workflow reads the experiment settings from a YAML file, builds the dataset and model, loads the SAM pretrained checkpoint, trains the selected parameters, evaluates the model on the validation set, and saves checkpoints and evaluation results.
+
+The main implementation is organized around the following files:
+
+```text
+train.py
+└── models/sam.py
+    └── models/mmseg/models/sam/
+        ├── __init__.py
+        ├── image_encoder.py
+        ├── mask_decoder.py
+        └── transformer.py
+```
 
 ## Repository Structure
 
@@ -10,55 +28,110 @@ GeoSeg-SAM/
 │   ├── wlk-256input.yaml
 │   └── yjs-256input.yaml
 ├── datasets/
+│   ├── image_folderw.py
+│   ├── wrappersw.py
+│   └── wrappersY.py
 ├── models/
-├── requirements.txt
-├── train.py
-├── pretrained/                  # create manually
+│   ├── sam.py
+│   └── mmseg/models/sam/
+│       ├── __init__.py
+│       ├── image_encoder.py
+│       ├── mask_decoder.py
+│       └── transformer.py
+├── pretrained/
 │   └── sam_vit_b_01ec64.pth
-├── wdatas/                      # create manually
+├── wdatas/
 │   ├── wlk-256data/
 │   └── yjs-256data/
-└── outputs/                     # generated during training
+├── requirements.txt
+└── train.py
 ```
+
+The `pretrained/`, `wdatas/`, and output directories are prepared locally and are not required to be stored in the repository.
+
+## Main Workflow
+
+### 1. Training entry: `train.py`
+
+`train.py` is the main executable file. It performs the following steps:
+
+1. Loads the selected YAML configuration.
+2. Builds paired image-label datasets through `datasets/image_folderw.py` and applies the configured train/validation wrapper.
+3. Creates the GeoSeg-SAM model through the model registry.
+4. Loads the SAM ViT-B pretrained checkpoint.
+5. Freezes most image-encoder parameters and enables the task-specific trainable modules.
+6. Trains the model and evaluates it on the validation set.
+7. Records segmentation metrics and saves checkpoints and confusion-matrix heatmaps.
+
+### 2. Model assembly: `models/sam.py`
+
+`models/sam.py` defines and registers the GeoSeg-SAM model. It connects the image encoder, mask decoder, and two-way transformer into the semantic-segmentation network.
+
+The model uses empty sparse prompts and a learned no-mask embedding, allowing the SAM architecture to operate as a closed-set semantic segmentation model. The active training objective combines Cross-Entropy loss and Dice loss.
+
+### 3. SAM module exports: `models/mmseg/models/sam/__init__.py`
+
+This file exposes the SAM components used by `models/sam.py`, including:
+
+- `ImageEncoderViT`
+- `MaskDecoder`
+- `TwoWayTransformer`
+
+### 4. Image encoder: `image_encoder_DSSA.py`
+
+The image encoder is based on the SAM ViT image encoder. It includes adapter-related and multi-scale feature-processing modules for geological remote-sensing imagery.
+
+The encoder converts an input image into the main image embedding and intermediate multi-level features used by the segmentation model.
+
+### 5. Mask decoder: `mask_decoder.py`
+
+The mask decoder transforms the encoded image representation into class-wise segmentation masks. It combines image features, positional encoding, prompt embeddings, and transformer outputs to produce the final semantic prediction.
+
+### 6. Two-way transformer: `transformer.py`
+
+The two-way transformer performs attention-based interaction between image features and token embeddings. Its output is used by the mask decoder to generate the segmentation masks and mask-quality predictions.
 
 ## Installation
 
 Clone the repository and enter the project directory:
 
 ```bash
-git clone https://github.com/WanZhan-lucky/GeoSeg_SAM.git
-cd GeoSeg_SAM
+git clone https://github.com/WanZhan-lucky/GeoSeg-SAM.git
+cd GeoSeg-SAM
 ```
 
-A CUDA-enabled environment is required by the current training script. One compatible setup is:
+Create the environment:
 
 ```bash
 conda create -n geoseg-sam python=3.8 -y
 conda activate geoseg-sam
+```
 
+Install PyTorch and TorchVision according to the local CUDA environment. For example:
+
+```bash
 pip install torch==1.13.0+cu116 torchvision==0.14.0+cu116 \
   --extra-index-url https://download.pytorch.org/whl/cu116
+```
+
+Install the remaining dependencies:
+
+```bash
 pip install -r requirements.txt
 pip install rasterio seaborn prettytable
 ```
 
-The bundled MMSegmentation code requires MMCV 1.x (`1.1.4 <= mmcv <= 1.7.0`). Install an MMCV or MMCV-Full build compatible with the selected PyTorch and CUDA versions. Do not install MMCV 2.x for the current codebase.
+The bundled MMSegmentation implementation uses MMCV 1.x. Install an MMCV build compatible with the selected PyTorch and CUDA versions.
 
-## SAM Pretrained Checkpoint
+## Pretrained Checkpoint
 
-Download the official SAM ViT-B checkpoint:
-
-- [`sam_vit_b_01ec64.pth`](https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth)
-
-Place it at:
+Prepare the official SAM ViT-B checkpoint and place it at:
 
 ```text
-GeoSeg-SAM/
-└── pretrained/
-    └── sam_vit_b_01ec64.pth
+pretrained/sam_vit_b_01ec64.pth
 ```
 
-Both provided configurations use:
+The provided configurations use:
 
 ```yaml
 sam_checkpoint: ./pretrained/sam_vit_b_01ec64.pth
@@ -66,40 +139,38 @@ sam_checkpoint: ./pretrained/sam_vit_b_01ec64.pth
 
 ## Dataset Preparation
 
-Arrange the datasets as follows:
+The repository provides configurations for the WLK and YJS datasets. Dataset download links are not included in this README. Prepare the datasets locally using the following structure:
 
 ```text
-GeoSeg-SAM/
-└── wdatas/
-    ├── wlk-256data/
-    │   ├── train/
-    │   │   ├── images/
-    │   │   └── labels/
-    │   └── val/
-    │       ├── images/
-    │       └── labels/
-    └── yjs-256data/
-        ├── train/
-        │   ├── images/
-        │   └── labels/
-        └── val/
-            ├── images/
-            └── labels/
+wdatas/
+├── wlk-256data/
+│   ├── train/
+│   │   ├── images/
+│   │   └── labels/
+│   └── val/
+│       ├── images/
+│       └── labels/
+└── yjs-256data/
+    ├── train/
+    │   ├── images/
+    │   └── labels/
+    └── val/
+        ├── images/
+        └── labels/
 ```
 
-The active data loader uses `rasterio`:
+Data conventions:
 
-- Images are read as three-band raster images and converted to RGB.
-- Labels are read from the first raster band as single-channel class-index masks.
-- WLK labels must use class indices `0-12` for 13 classes.
-- YJS labels must use class indices `0-7` for 8 classes.
-- Image and label files are paired according to their sorted file order, so the two directories must contain matching files in the same naming order.
-- Images and masks are resized to `256 × 256` by the provided configurations.
+- Images are three-band raster images and are converted to RGB by the data loader.
+- Labels are single-band class-index masks.
+- WLK contains 13 classes with label indices from `0` to `12`.
+- YJS contains 8 classes with label indices from `0` to `7`.
+- Image and label directories must contain correctly paired files.
+- The provided configurations resize images and labels to `256 × 256`.
+
+Dataset paths and class definitions can be changed in the corresponding YAML configuration file.
 
 ## Training
-
-> [!IMPORTANT]
-> The current repository snapshot cannot run training directly: `train.py` imports missing root-level `utils.py` and `eval_iou.py`, and the bundled SAM package also references a missing `models/mmseg/models/sam/prompt_encoder.py`. These files/imports must be restored or corrected before training can start.
 
 ### WLK
 
@@ -119,17 +190,7 @@ python train.py \
   --name geoseg_yjs
 ```
 
-### Command-Line Arguments
-
-| Argument | Description |
-|---|---|
-| `--config` | Path to the YAML configuration file. Defaults to `configs/wlk-256input.yaml`. |
-| `--path` | Root directory for training outputs. Always set this explicitly because the code's default path is machine-specific. |
-| `--name` | Experiment directory name. If omitted, the configuration filename is used. |
-| `--tag` | Optional suffix appended to the experiment name. |
-| `--local_rank` | Compatibility argument retained by the script; it is not used by the current single-process training code. |
-
-Example with a run tag:
+### Optional run tag
 
 ```bash
 python train.py \
@@ -139,11 +200,86 @@ python train.py \
   --tag run1
 ```
 
-This creates `./outputs/geoseg_wlk_run1/`.
+This creates the experiment directory:
+
+```text
+outputs/geoseg_wlk_run1/
+```
+
+### Command-line arguments
+
+| Argument | Description |
+|---|---|
+| `--config` | Path to the YAML configuration file. |
+| `--path` | Root directory used to save experiment outputs. |
+| `--name` | Experiment directory name. |
+| `--tag` | Optional suffix appended to the experiment name. |
+| `--local_rank` | Compatibility argument retained by the training script. |
+
+It is recommended to explicitly specify `--path ./outputs` when starting an experiment.
+
+## Configuration
+
+The main experiment settings are stored in `configs/wlk-256input.yaml` and `configs/yjs-256input.yaml`.
+
+Important fields include:
+
+```yaml
+train_dataset:
+  dataset:
+    name: paired-image-folders  # registered in datasets/image_folderw.py
+    args:
+      classes: [...]
+      root_path_1: ./wdatas/.../train/images
+      root_path_2: ./wdatas/.../train/labels
+  wrapper:
+    name: train                 # train wrapper
+    args:
+      inp_size: 256
+      augment: true
+  batch_size: 1
+
+val_dataset:
+  dataset:
+    name: paired-image-folders  # registered in datasets/image_folderw.py
+    args:
+      classes: [...]
+      root_path_1: ./wdatas/.../val/images
+      root_path_2: ./wdatas/.../val/labels
+  wrapper:
+    name: val                   # validation wrapper
+    args:
+      inp_size: 256
+  batch_size: 1
+
+sam_checkpoint: ./pretrained/sam_vit_b_01ec64.pth
+
+model:
+  name: sam
+  args:
+    num_classes: 13
+    inp_size: 256
+
+optimizer:
+  name: adamw
+  args:
+    lr: 0.0002
+
+epoch_max: 120
+```
+
+The dataset pipeline is divided into two parts:
+
+- `datasets/image_folderw.py` registers `image-folder` and `paired-image-folders`, reads the raster images and masks, and pairs the image and label folders.
+- `datasets/wrappersw.py` and `datasets/wrappersY.py` provide the `train` and `val` preprocessing wrappers. The wrapper enabled in `datasets/__init__.py` is selected through `wrapper.name` in the YAML configuration.
+
+The default dataset initialization currently imports `image_folderw.py` and `wrappersw.py`. `wrappersY.py` is retained as the alternative wrapper implementation for the corresponding data-processing setup.
+
+For YJS, `num_classes` is set to `8`. When adapting the project to another dataset, keep the class list, label indices, and `num_classes` consistent.
 
 ## Outputs
 
-For an experiment named `geoseg_wlk`, the training script writes:
+For an experiment named `geoseg_wlk`, the main outputs are:
 
 ```text
 outputs/
@@ -157,69 +293,12 @@ outputs/
     └── heatmap_<epoch>.jpg
 ```
 
-- `model_epoch_last.pth` and `optim_epoch_last.pth` are updated after each epoch.
-- `model_epoch_best.pth` is updated when validation mIoU improves.
-- `model_epoch_best_mIoU_<score>.pth` is additionally saved when the best mIoU is greater than `0.61`.
-- A confusion-matrix heatmap is saved under `<--path>/heatmap/` when a new best mIoU is reached.
-
-Validation reports overall accuracy, mIoU, per-class IoU, precision, recall, F1 score, FWIoU, and the confusion matrix.
-
-## Configuration
-
-The main settings are defined in `configs/wlk-256input.yaml` and `configs/yjs-256input.yaml`:
-
-```yaml
-train_dataset:
-  dataset:
-    args:
-      classes: [...]
-      root_path_1: ./wdatas/.../train/images
-      root_path_2: ./wdatas/.../train/labels
-  wrapper:
-    args:
-      inp_size: 256
-  batch_size: 1
-
-val_dataset:
-  dataset:
-    args:
-      classes: [...]
-      root_path_1: ./wdatas/.../val/images
-      root_path_2: ./wdatas/.../val/labels
-  batch_size: 1
-
-sam_checkpoint: ./pretrained/sam_vit_b_01ec64.pth
-
-model:
-  name: sam
-  args:
-    num_classes: 13  # 8 for YJS
-    inp_size: 256
-
-optimizer:
-  name: adamw
-  args:
-    lr: 0.0002
-
-epoch_max: 120
-```
-
-The current training implementation freezes most image-encoder parameters and trains the adapter-related modules and decoder. Although the configuration uses `loss: iou`, the active loss calculation in `models/sam.py` is Cross-Entropy plus Dice loss.
-
-To adapt the project to another dataset, update the image and label paths, class names, `num_classes`, and other task-specific settings consistently.
-
-## Notes
-
-- The default data paths are relative to the repository root under `./wdatas/`.
-- The default SAM checkpoint path is `./pretrained/sam_vit_b_01ec64.pth`.
-- Explicitly pass `--path ./outputs`; the default value in `train.py` is specific to the original development environment.
-- The current code uses `.cuda()` directly in several places, so training requires a CUDA-capable GPU.
-- The repository currently provides training and validation code but no standalone inference script.
+The validation process reports overall accuracy, mIoU, per-class IoU, precision, recall, F1 score, FWIoU, and the confusion matrix. The best checkpoint is selected according to validation mIoU.
 
 ## Citation
 
-If you use this code or the released datasets in your research, please cite the corresponding GeoSeg-SAM paper. The BibTeX entry will be added after publication.
+If you use GeoSeg-SAM or the associated datasets in your research, please cite the corresponding paper. Citation information will be added after publication.
 
 ## Acknowledgements
 
-This work builds upon the [Segment Anything Model (SAM)](https://github.com/facebookresearch/segment-anything), MMSegmentation, and related open-source research. We thank their authors and contributors for making these resources publicly available.
+This project builds upon the Segment Anything Model, MMSegmentation, and related open-source research. We thank the respective authors and contributors for making their work available.
